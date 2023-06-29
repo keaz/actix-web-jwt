@@ -130,14 +130,43 @@ where
             match token {
                 Ok(_) => Ok(fut.await?),
                 Err(err) => {
-                    warn!("JWT is invalid {:?}", err);
-                    Err(actix_web::error::Error::from(
-                        JWTResponseError::invalid_jwt(),
-                    ))
+                    match err.kind() {
+                        jsonwebtoken::errors::ErrorKind::InvalidSignature => return Err(invalid_invalid_signature()),
+                        jsonwebtoken::errors::ErrorKind::ExpiredSignature => return Err(expired_jwt()),
+                        jsonwebtoken::errors::ErrorKind::InvalidIssuer => return Err(invalid_invalid_iss()),
+                        _ => {
+                            warn!("JWT is invalid {:?}", err);
+                            return Err(invalid_jwt())
+                        },
+                    }
                 }
             }
         })
     }
+}
+
+fn invalid_jwt() -> actix_web::Error {
+    return actix_web::error::Error::from(
+        JWTResponseError::invalid_jwt(),
+    )
+}
+
+fn expired_jwt() -> actix_web::Error {
+    return actix_web::error::Error::from(
+        JWTResponseError::expired_jwt(),
+    )
+}
+
+fn invalid_invalid_signature() -> actix_web::Error {
+    return actix_web::error::Error::from(
+        JWTResponseError::invalid_invalid_signature(),
+    )
+}
+
+fn invalid_invalid_iss() -> actix_web::Error {
+    return actix_web::error::Error::from(
+        JWTResponseError::invalid_invalid_issr(),
+    )
 }
 
 async fn get_cert(cert_url: &String) -> Result<Cert, JWKSError> {
@@ -249,6 +278,27 @@ impl JWTResponseError {
         }
     }
 
+    pub fn expired_jwt() -> Self {
+        JWTResponseError {
+            status_code: StatusCode::UNAUTHORIZED,
+            message: "Expired JWT".to_string(),
+        }
+    }
+    
+    pub fn invalid_invalid_signature() -> Self {
+        JWTResponseError {
+            status_code: StatusCode::UNAUTHORIZED,
+            message: "Invalid Invalid Signature".to_string(),
+        }
+    }
+
+    pub fn invalid_invalid_issr() -> Self {
+        JWTResponseError {
+            status_code: StatusCode::UNAUTHORIZED,
+            message: "Invalid Invalid Issure".to_string(),
+        }
+    }
+
     pub fn missing_jwt() -> Self {
         JWTResponseError {
             status_code: StatusCode::UNAUTHORIZED,
@@ -324,18 +374,19 @@ impl Clone for Key {
     }
 }
 
+
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub exp: usize,
-    pub iat: usize,
     pub iss: String,
-    pub aud: Option<String>,
     pub sub: String,
+    pub aud: Option<String>,
+    pub exp: usize,
     pub nbf: Option<usize>,
-    pub azp: String,
-    #[serde(rename = "clientId")]
-    pub client_id: String,
-    pub scope: String,
+    pub iat: usize,
+    pub jti: Option<String>,
+    pub azp: Option<String>,
+    pub scope: Option<String>,
 }
 
 #[cfg(test)]

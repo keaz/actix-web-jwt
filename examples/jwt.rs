@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use actix_web::HttpServer;
+use actix_web::{HttpServer, get, Responder, HttpResponse};
 use actix_web_jwt::{CertInvoker, Jwt};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
@@ -23,11 +23,20 @@ async fn main() -> std::io::Result<()> {
     sched.add(job).await.unwrap();
     let scheduler = sched.start();
     let server =
-        HttpServer::new(move || actix_web::App::new().wrap(Jwt::from(Arc::clone(&arc_jwt))))
-            .bind("127.0.0.1:8080")
-            .unwrap()
-            .run();
+        HttpServer::new(move || actix_web::App::new()
+            .service(hello)
+            .wrap(Jwt::from(Arc::clone(&arc_jwt)))
+        )
+        .bind("127.0.0.1:8080")
+        .unwrap()
+        .run();
 
     let _ = futures::future::join(scheduler, server).await;
     Ok(())
+}
+
+
+#[get("/hello")]
+async fn hello() -> impl Responder {
+    HttpResponse::Ok().body("Hello world!")
 }

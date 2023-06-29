@@ -4,7 +4,7 @@ description = "JWT validation middleware for actix-web"
 keywords = ["actix", "middleware", "web", "jwt", "jwks"]
 repository = "https://github.com/keaz/actix-web-jwt"
 license = "MIT OR Apache-2.0"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 authors = ["Kasun Ranasinghe <kasunranasinghe303@gmail.com>"]
