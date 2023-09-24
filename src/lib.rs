@@ -121,7 +121,7 @@ where
             let kid = jwt_header.kid.unwrap();
 
             let jwt_cert = cert.lock().await;
-            let cert = jwt_cert.clone().unwrap();
+            let cert = jwt_cert.clone().unwrap(); // Cert should available at this point
 
             let key = cert.keys.iter().find(|key| key.kid == kid).unwrap();
             let de_key = DecodingKey::from_rsa_components(key.n.as_str(), key.e.as_str()).unwrap();
@@ -178,7 +178,7 @@ async fn get_cert(cert_url: &String) -> Result<Cert, JWKSError> {
             "Error while getting cert".to_string(),
         ));
     }
-    let cert: Result<Cert, reqwest::Error> = response.unwrap().json().await;
+    let cert: Result<CertResponse, reqwest::Error> = response.unwrap().json().await;
     if cert.is_err() {
         warn!("Error while deserialize cert");
         return Err(JWKSError::ErrorDeserializingCert(format!(
@@ -186,7 +186,13 @@ async fn get_cert(cert_url: &String) -> Result<Cert, JWKSError> {
             cert.err().unwrap()
         )));
     }
-    Ok(cert.unwrap())
+
+    let keys = cert.unwrap().keys.iter().map(|key| {
+        let de_key = DecodingKey::from_rsa_components(key.n.as_str(), key.e.as_str()).unwrap();
+        Key::from(key.clone(), de_key)
+    }).collect();
+    
+    Ok(Cert{keys})
 }
 
 ///
@@ -238,7 +244,6 @@ impl CertInvoker {
         let mut jwt_cert = self.cert.lock().await;
         match cert {
             Ok(cert) => {
-                debug!("Cert is {:?}", cert);
                 *jwt_cert = Option::Some(cert);
             }
             Err(er) => {
@@ -331,12 +336,12 @@ pub struct JWTResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Cert {
-    pub keys: Vec<Key>,
+struct CertResponse {
+    pub keys: Vec<KeyResponse>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Key {
+struct KeyResponse {
     pub kid: String,
     pub kty: String,
     #[serde(rename = "use")]
@@ -348,6 +353,48 @@ pub struct Key {
     #[serde(rename = "x5t#S256")]
     pub x5t_s256: Option<String>,
     pub alg: String,
+}
+
+impl Clone for CertResponse {
+    fn clone(&self) -> Self {
+        CertResponse {
+            keys: self.keys.clone(),
+        }
+    }
+}
+
+impl Clone for KeyResponse {
+    fn clone(&self) -> Self {
+        KeyResponse {
+            kid: self.kid.clone(),
+            kty: self.kty.clone(),
+            use_key: self.use_key.clone(),
+            n: self.n.clone(),
+            e: self.e.clone(),
+            x5c: self.x5c.clone(),
+            x5t: self.x5t.clone(),
+            x5t_s256: self.x5t_s256.clone(),
+            alg: self.alg.clone(),
+        }
+    }
+}
+
+pub struct Cert {
+    pub keys: Vec<Key>,
+}
+
+
+pub struct Key {
+    pub kid: String,
+    pub kty: String,
+    pub use_key: String,
+    pub n: String,
+    pub e: String,
+    pub x5c: Option<Vec<String>>,
+    pub x5t: Option<String>,
+    pub x5t_s256: Option<String>,
+    pub alg: String,
+    pub de_key: DecodingKey,
 }
 
 impl Clone for Cert {
@@ -370,9 +417,22 @@ impl Clone for Key {
             x5t: self.x5t.clone(),
             x5t_s256: self.x5t_s256.clone(),
             alg: self.alg.clone(),
+            de_key: self.de_key.clone(),
         }
     }
 }
+
+
+impl Key {
+    
+    fn from(key_response: KeyResponse, de_key: DecodingKey) -> Self {
+        Key { kid: key_response.kid, kty: key_response.kty, use_key: key_response.use_key, 
+            n: key_response.n, e: key_response.e, x5c: key_response.x5c, x5t: key_response.x5t, x5t_s256: key_response.x5t_s256, 
+            alg: key_response.alg, de_key }
+    }
+
+}
+
 
 
 
