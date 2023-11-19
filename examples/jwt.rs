@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use actix_web::{HttpServer, get, Responder, HttpResponse};
-use actix_web_jwt::{CertInvoker, Jwt};
+use actix_web_jwt::{CertInvoker, Jwt, Claims, JWTResponseError, JWTValidator};
+use jsonwebtoken::TokenData;
+use reqwest::StatusCode;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[tokio::main]
@@ -22,10 +24,12 @@ async fn main() -> std::io::Result<()> {
     .unwrap();
     sched.add(job).await.unwrap();
     let scheduler = sched.start();
+
+
     let server =
         HttpServer::new(move || actix_web::App::new()
             .service(hello)
-            .wrap(Jwt::from(Arc::clone(&arc_jwt)))
+            .wrap(Jwt::from(Arc::clone(&arc_jwt), Some(Arc::new(Validate{}))))
         )
         .bind("127.0.0.1:8080")
         .unwrap()
@@ -35,6 +39,20 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+struct Validate;
+
+impl JWTValidator for Validate {
+    
+    fn validate(&self,toke_data:TokenData<Claims>) -> Result<(), JWTResponseError> {
+        println!("validate token data: {:?}", toke_data);
+        if let Some(aud) = toke_data.claims.aud {
+            if aud != "1234567890" {
+                return Err(JWTResponseError::toke_validation_error(StatusCode::UNAUTHORIZED, "aud error".to_string()));
+            }
+        }
+        Ok(())
+    }
+}
 
 #[get("/hello")]
 async fn hello() -> impl Responder {

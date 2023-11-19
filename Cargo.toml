@@ -4,7 +4,7 @@ description = "JWT validation middleware for actix-web"
 keywords = ["actix", "middleware", "web", "jwt", "jwks"]
 repository = "https://github.com/keaz/actix-web-jwt"
 license = "MIT OR Apache-2.0"
-version = "0.2.1"
+version = "1.0.0"
 edition = "2021"
 
 authors = ["Kasun Ranasinghe <kasunranasinghe303@gmail.com>"]
@@ -14,7 +14,7 @@ readme = "README.md"
 actix-web = "4.3.1"
 futures = "0.3.28"
 futures-util = "0.3.28"
-jsonwebtoken = "8.3.0"
+jsonwebtoken = "9.1.0"
 log = "0.4.19"
 reqwest = { version = "0.11.18", features = ["json"] }
 serde = { version = "1.0.164", features = ["derive"] }

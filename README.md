@@ -38,7 +38,7 @@ async fn main() -> std::io::Result<()> {
     
     let server = HttpServer::new(move || {
         actix_web::App::new()
-            .wrap(Jwt::from(Arc::clone(&arc_jwt)))
+            .wrap(Jwt::from(Arc::clone(&arc_jwt), Some(Arc::new(Validate{}))))
     })
     .bind("127.0.0.1:8080")
     .unwrap()
@@ -47,4 +47,20 @@ async fn main() -> std::io::Result<()> {
     let _ = futures::future::join(scheduler, server).await;
     Ok(())
 }
+
+struct Validate;
+
+impl JWTValidator for Validate {
+    
+    fn validate(&self,toke_data:TokenData<Claims>) -> Result<(), JWTResponseError> {
+        println!("validate token data: {:?}", toke_data);
+        if let Some(aud) = toke_data.claims.aud {
+            if aud != "1234567890" {
+                return Err(JWTResponseError::toke_validation_error(StatusCode::UNAUTHORIZED, "aud error".to_string()));
+            }
+        }
+        Ok(())
+    }
+}
+
 ```

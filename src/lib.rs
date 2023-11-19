@@ -20,7 +20,7 @@ use actix_web::{
     error, Error, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
-use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, DecodingKey, Validation, TokenData};
 use log::{debug, error, info, warn};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,31 @@ use tokio::sync::Mutex;
 
 pub struct Jwt {
     cert_invoker: Arc<CertInvoker>,
+    validator: Option<Arc<dyn JWTValidator>>,
+
 }
+
+///
+/// This is use to validate the JWT token in a application specific way
+/// 
+pub trait JWTValidator  {
+
+    ///
+    /// Validate the token.
+    /// Should now use any blocking operation
+    /// 
+    /// # Arguments
+    /// * `toke_data` - The token data
+    /// 
+    /// # Return
+    /// * `Result<(), JWTResponseError>` - If the token is valid then return Ok otherwise return Err
+    /// 
+    /// 
+    fn validate(&self,toke_data:TokenData<Claims>) -> Result<(), JWTResponseError>;
+    
+} 
+
+
 
 ///
 /// Use to crete a JWT middleware
@@ -37,8 +61,8 @@ impl Jwt {
     ///
     /// Creates a JWT from the CertInvoker
     ///
-    pub fn from(cert_invoker: Arc<CertInvoker>) -> Self {
-        Jwt { cert_invoker }
+    pub fn from(cert_invoker: Arc<CertInvoker>,validator: Option<Arc<dyn JWTValidator>>) -> Self {
+        Jwt { cert_invoker, validator }
     }
 }
 
@@ -58,6 +82,7 @@ where
         ready(Ok(JwtMiddleware {
             service,
             cert_invoker: Arc::clone(&self.cert_invoker),
+            validator: self.validator.clone(),
         }))
     }
 }
@@ -68,6 +93,7 @@ where
 pub struct JwtMiddleware<S> {
     service: S,
     cert_invoker: Arc<CertInvoker>,
+    validator: Option<Arc<dyn JWTValidator>>,
 }
 
 const BEARER: &str = "Bearer ";
@@ -94,6 +120,7 @@ where
 
         let fut = self.service.call(req);
         let cert = Arc::clone(&self.cert_invoker.cert);
+        let function = self.validator.clone();
 
         Box::pin(async move {
             if jwt_token.is_empty() {
@@ -128,7 +155,15 @@ where
             let token = decode::<Claims>(&jwt_token, &de_key, &Validation::new(jwt_header.alg));
 
             match token {
-                Ok(_) => Ok(fut.await?),
+                Ok(toke_data) => {
+                    if let Some(function) = function {
+                        let result: Result<_, _> = function.validate(toke_data);
+                        if let Err(err) = result {
+                            return Err(err.into())
+                        }
+                    }
+                    Ok(fut.await?)
+                },
                 Err(err) => {
                     match err.kind() {
                         jsonwebtoken::errors::ErrorKind::InvalidSignature => return Err(invalid_invalid_signature()),
@@ -270,9 +305,9 @@ pub enum JWKSError {
 }
 
 #[derive(Debug)]
-struct JWTResponseError {
-    status_code: StatusCode,
-    message: String,
+pub struct JWTResponseError {
+    pub status_code: StatusCode,
+    pub message: String,
 }
 
 impl JWTResponseError {
@@ -308,6 +343,13 @@ impl JWTResponseError {
         JWTResponseError {
             status_code: StatusCode::UNAUTHORIZED,
             message: "Missing JWT".to_string(),
+        }
+    }
+
+    pub fn toke_validation_error(status_code:StatusCode, message: String ) -> Self {
+        JWTResponseError {
+            status_code,
+            message,
         }
     }
 }
